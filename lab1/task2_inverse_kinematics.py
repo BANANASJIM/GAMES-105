@@ -89,7 +89,7 @@ def part1_animation(viewer, target_pos):
     marker = viewer.create_marker(target_pos, [1, 0, 0, 1])
     
     joint_name, joint_parent, joint_initial_position = viewer.get_meta_data()
-    meta_data = MetaData(joint_name, joint_parent, joint_initial_position, 'lToeJoint_end', 'lWrist_end')
+    meta_data = MetaData(joint_name, joint_parent, joint_initial_position, 'lToeJoint_end', 'lWrist')
     joint_position = viewer.get_joint_positions()
     joint_orientation = viewer.get_joint_orientations()
     class UpdateHandle:
@@ -113,7 +113,7 @@ def part2(viewer, bvh_name):
     bvh_joint_name, bvh_joint_parent, bvh_offset = part1_calculate_T_pose(bvh_name)
     joint_name, _, joint_initial_position = viewer.get_meta_data()
     idx = [joint_name.index(name) for name in bvh_joint_name]
-    meta_data = MetaData(bvh_joint_name, bvh_joint_parent, joint_initial_position[idx], 'lShoulder', 'lWrist')
+    meta_data = MetaData(bvh_joint_name, bvh_joint_parent, joint_initial_position[idx], 'lShoulder', 'lWrist_end')
     class UpdateHandle:
         def __init__(self, meta_data, motion_data, joint_offset):
             self.meta_data = meta_data
