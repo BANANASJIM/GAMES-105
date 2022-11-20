@@ -18,58 +18,101 @@ def part1_inverse_kinematics(meta_data, joint_positions, joint_orientations, tar
     joint_parents = meta_data.joint_parent
     joint_initial_positions = meta_data.joint_initial_position
     joint_names = meta_data.joint_name
-    temp_joint_positions = joint_positions
-    temp_joint_orientations = joint_orientations
+    temp_joint_positions = joint_positions.copy()
+    
+    temp_joint_orientations = joint_orientations.copy()
+    
     root_joint_index = joint_names.index(meta_data.root_joint)
     end_joint_index = joint_names.index(meta_data.end_joint)
-    # 末端位置
-    end_position = temp_joint_positions[end_joint_index]
-    path1 = list(reversed(path1))
-    
-    temp_joint_rotations =  np.tile(np.array([0.,0.,0.,1.0]),[len(joint_names),1])
 
-    MAX_ITERATION = 50
-    for it in range(MAX_ITERATION):
-        prev_joint_rotations = temp_joint_rotations
-        temp_joint_rotations =  np.tile(np.array([0.,0.,0.,1.0]),[len(joint_names),1])
-        if np.linalg.norm(target_pose - end_position) < 0.01:
-            break
-        for i in range(len(path1)):
+    joint_dists = []
+    dist = 0
+    
+    for i in range(len(path)-1):
+        joint_dist = np.linalg.norm(joint_initial_positions[path[i]] - joint_initial_positions[path[i+1]])
+        joint_dists.append(joint_dist)
+        dist += joint_dist
+        
+
+    root2target_dist =  np.linalg.norm(temp_joint_positions[root_joint_index]-target_pose)
+    #Check whether the target is within reach
+    
+    if root2target_dist > dist :
+        # The target is unreachable
+        for i in range(len(path) - 1):
+            r = np.linalg.norm(target_pose - temp_joint_positions[path[i]])
+            lamda = joint_dists[i] / r
+            temp_joint_positions[path[i + 1]] = (1 - lamda)*temp_joint_positions[path[i]] + lamda*target_pose
+    else :
+        #The target is reachable
+        b = joint_positions[root_joint_index]
+        #Check whether the distance between the end effector
+        difA = np.linalg.norm(temp_joint_positions[end_joint_index] - target_pose)
+        while difA > 0.01:
+            #STAGE 1: FORWARD REACHING
+            temp_joint_positions[end_joint_index] = target_pose
+            for i in range(len(path)-2,-1,-1):
+                r = np.linalg.norm( temp_joint_positions[path[i+1]] - temp_joint_positions[path[i]])
+                lamda = joint_dists[i] / r
+                #Find the new joint positions pi
+                temp_joint_positions[path[i]] = (1 - lamda)*temp_joint_positions[path[i+1]] + lamda * temp_joint_positions[path[i]]
+
+            #STAGE 2: BACKWARD REACHING
+            temp_joint_positions[root_joint_index] = b
             
-            joint_position = temp_joint_positions[path1[i]]
-            joint_to_target = target_pose - joint_position
-            joint_to_end =  end_position - joint_position
+            for i in range(len(path)-1):
+                r = np.linalg.norm( temp_joint_positions[path[i+1]] - temp_joint_positions[path[i]])
+                lamda = joint_dists[i] / r
+                temp_joint_positions[path[i+1]] = (1 - lamda)*temp_joint_positions[path[i]] + lamda * temp_joint_positions[path[i+1]]
             
-            rotation_angel = np.dot(joint_to_end,joint_to_target)
-            rotation_angel = rotation_angel / (np.linalg.norm(joint_to_end)*np.linalg.norm(joint_to_target))
-            rotation_angel = np.arccos(rotation_angel)
-            rotation_vector = np.cross(joint_to_end,joint_to_target)
-            normalized_vec = rotation_vector/np.linalg.norm(rotation_vector)
+            difA = np.linalg.norm(temp_joint_positions[end_joint_index] - target_pose)
             
-            rotation = R.from_rotvec(rotation_angel * normalized_vec)
-            
-            
-            if joint_names[path1[i]][-4:] != "_end":
-                temp_joint_rotations[path1[i]] = rotation.as_quat()
-                end_position = joint_position + rotation.apply(joint_to_end)
-            else:
-                end_position = joint_position
-                
-                
-        for index in range(len(joint_names)):
-            #对根节点不做处理
-            if index == root_joint_index:
+    
+    #update orientation
+    for i in range(len(path2)):
+        #ignore root joint
+        if i == 0 :
+            continue
+        
+        dir = (temp_joint_positions[path2[i - 1]] - temp_joint_positions[path2[i]])/np.linalg.norm(temp_joint_positions[path2[i-1]] - temp_joint_positions[path2[i]])
+        init_dir = (joint_initial_positions[path2[i - 1]] - joint_initial_positions[path2[i]])/np.linalg.norm(joint_initial_positions[path2[i-1]] - joint_initial_positions[path2[i]])
+        rotation_angel = np.dot(dir,init_dir) / (np.linalg.norm(dir)*np.linalg.norm(init_dir))
+        rotation_angel = -1.0 if rotation_angel < -1.0 + 0.00001 else rotation_angel
+        rotation_angel = 1.0 if rotation_angel > 1.0 - 0.00001 else rotation_angel
+        rotation_angel = np.arccos(rotation_angel) 
+        rotation_vector = np.cross(init_dir,dir)
+        normalized_vec =  rotation_vector/np.linalg.norm(rotation_vector)  if np.count_nonzero(rotation_vector) else np.array([0.,0.,0.])
+        rotation = R.from_rotvec(rotation_angel * normalized_vec)
+        orientation = rotation
+        temp_joint_orientations[path2[i]] = orientation.as_quat()
+        
+    for i in range(len(path1)):
+        #ignore end joint
+        if i == 0 :
+            continue
+        dir = (temp_joint_positions[path1[i - 1]] - temp_joint_positions[path1[i]])/np.linalg.norm(temp_joint_positions[path1[i - 1]] - temp_joint_positions[path1[i]])
+        init_dir = (joint_initial_positions[path1[i - 1]] - joint_initial_positions[path1[i]])/np.linalg.norm(joint_initial_positions[path1[i - 1]] - joint_initial_positions[path1[i]])
+        rotation_angel = np.dot(dir,init_dir) / (np.linalg.norm(dir)*np.linalg.norm(init_dir))
+        rotation_angel = -1.0 if rotation_angel < -1.0 + 0.00001 else rotation_angel
+        rotation_angel = 1.0 if rotation_angel > 1.0 - 0.00001 else rotation_angel
+        rotation_angel = np.arccos(rotation_angel) 
+        rotation_vector = np.cross(init_dir,dir)
+        normalized_vec =  rotation_vector/np.linalg.norm(rotation_vector)  if np.count_nonzero(rotation_vector) else np.array([0.,0.,0.])
+        rotation = R.from_rotvec(rotation_angel * normalized_vec)
+        orientation = rotation
+        temp_joint_orientations[path1[i]] = orientation.as_quat()
+    
+    #update fullbody fk
+    for index in range(len(joint_names)):
+            #ignore root joint
+            if index == 0:
                 continue
-            joint_rotation = R.from_quat(temp_joint_rotations[index])
             parent_orientation =R.from_quat(temp_joint_orientations[joint_parents[index]])
             parent_position = temp_joint_positions[joint_parents[index]]
             joint_offset = joint_initial_positions[index] - joint_initial_positions[joint_parents[index]]
-            prev_joint_rotation = R.from_quat(prev_joint_rotations[index])
-            joint_orientation = parent_orientation*prev_joint_rotation*joint_rotation
-            
-            temp_joint_orientations[index] =joint_orientation.as_quat()
+            #joint_orientation =  parent_orientation 
+            #temp_joint_orientations[index] =joint_orientation.as_quat()
             temp_joint_positions[index] =  parent_position + parent_orientation.apply(joint_offset)
-        
     
     joint_positions = temp_joint_positions
     joint_orientations = temp_joint_orientations

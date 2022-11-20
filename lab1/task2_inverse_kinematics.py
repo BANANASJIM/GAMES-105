@@ -60,6 +60,7 @@ def part1_simple(viewer, target_pos):
     joint_orientation = viewer.get_joint_orientations()
     
     joint_position, joint_orientation = part1_inverse_kinematics(meta_data, joint_position, joint_orientation, target_pos)
+    #joint_position, joint_orientation = part1_inverse_kinematics(meta_data, joint_position, joint_orientation, target_pos)
     viewer.show_pose(joint_name, joint_position, joint_orientation)
     viewer.run()
     pass
@@ -168,12 +169,13 @@ def main():
     viewer = SimpleViewer()
     
     # part1
-    # part1_simple(viewer, np.array([0.5, 0.75, 0.5]))
+    
+    # part1_simple(viewer, np.array([0.6, 0.5, 0.3]))
     # part1_hard(viewer, np.array([0.5, 0.5, 0.5]))
     # part1_animation(viewer, np.array([0.5, 0.5, 0.5]))
     
     # part2
-    # part2(viewer, 'data/walk60.bvh')
+    part2(viewer, 'data/walk60.bvh')
     
     # bonus(viewer, np.array([0.5, 0.5, 0.5]), np.array([0, 0.5, 0.5]))
 
