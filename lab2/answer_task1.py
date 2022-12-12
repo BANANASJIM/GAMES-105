@@ -157,8 +157,10 @@ class BVHMotion():
         调整关节顺序为target_joint_name
         '''
         idx = [self.joint_name.index(joint_name) for joint_name in target_joint_name]
+        idx_inv = [target_joint_name.index(joint_name) for joint_name in self.joint_name]
         self.joint_name = [self.joint_name[i] for i in idx]
-        self.joint_parent = [self.joint_parent[i] for i in idx]
+        self.joint_parent = [idx_inv[self.joint_parent[i]] for i in idx]
+        self.joint_parent[0] = -1
         self.joint_channel = [self.joint_channel[i] for i in idx]
         self.joint_position = self.joint_position[:,idx,:]
         self.joint_rotation = self.joint_rotation[:,idx,:]
@@ -238,7 +240,7 @@ def blend_two_motions(bvh_motion1, bvh_motion2, alpha):
     blend两个bvh动作
     假设两个动作的帧数分别为n1, n2
     alpha: 0~1之间的浮点数组，形状为(n3,)
-    返回的动作应该有n3帧，第i帧由alpha[i] * bvh_motion1[j] + (1-alpha[i]) * bvh_motion2[k]得到
+    返回的动作应该有n3帧，第i帧由(1-alpha[i]) * bvh_motion1[j] + alpha[i] * bvh_motion2[k]得到
     i均匀地遍历0~n3-1的同时，j和k应该均匀地遍历0~n1-1和0~n2-1
     '''
     
@@ -278,8 +280,8 @@ def concatenate_two_motions(bvh_motion1, bvh_motion2, mix_frame1, mix_time):
     
     # TODO: 你的代码
     # 下面这种直接拼肯定是不行的(
-    res.joint_position = np.concatenate([res.joint_position[:-mix_time], bvh_motion2.joint_position], axis=0)
-    res.joint_rotation = np.concatenate([res.joint_rotation[:-mix_time], bvh_motion2.joint_rotation], axis=0)
+    res.joint_position = np.concatenate([res.joint_position[:mix_frame1], bvh_motion2.joint_position], axis=0)
+    res.joint_rotation = np.concatenate([res.joint_rotation[:mix_frame1], bvh_motion2.joint_rotation], axis=0)
     
     return res
 
