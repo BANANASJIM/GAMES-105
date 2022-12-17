@@ -208,7 +208,11 @@ class BVHMotion():
         Ry = np.zeros_like(rotation)
         Rxz = np.zeros_like(rotation)
         # TODO: 你的代码
-        
+        temp_rot = R.from_quat(rotation).as_euler('xzy', degrees=False)
+        print(temp_rot)
+        Ry = R.from_euler('y', temp_rot[2], degrees=False).as_quat()
+        Rxz = R.from_euler('xzy', [temp_rot[0],temp_rot[1],0], degrees=False).as_quat()
+
         return Ry, Rxz
     
     # part 1
@@ -228,10 +232,20 @@ class BVHMotion():
         
         res = self.raw_copy() # 拷贝一份，不要修改原始数据
         
-        # 比如说，你可以这样调整第frame_num帧的根节点平移
+        rotation = res.joint_rotation[frame_num, 0, :]
+        Ry,Rxz = self.decompose_rotation_with_yaxis(rotation)
+        rotation_y = R.from_quat(Ry)
+        target_facing_direction_xz = target_facing_direction_xz / np.linalg.norm(target_facing_direction_xz)
+        target_facing_direction = np.array([target_facing_direction_xz[0], 0, target_facing_direction_xz[1]])
+        rotation_angle = np.arccos(np.dot([0,0,1], target_facing_direction))
+        ori_rotation_inv = rotation_y.inv()
+        rotation_y = R.from_euler('y', rotation_angle, degrees=False) * ori_rotation_inv
+        
+        res.joint_rotation[:, 0, :] = (R.from_quat(res.joint_rotation[:, 0, :]) * rotation_y).as_quat()
+        
+        res.joint_position[:, 0, :] = rotation_y.apply(res.joint_position[:, 0, :])
         offset = target_translation_xz - res.joint_position[frame_num, 0, [0,2]]
         res.joint_position[:, 0, [0,2]] += offset
-        # TODO: 你的代码
         return res
 
 # part2
@@ -249,8 +263,23 @@ def blend_two_motions(bvh_motion1, bvh_motion2, alpha):
     res.joint_rotation = np.zeros((len(alpha), res.joint_rotation.shape[1], res.joint_rotation.shape[2]))
     res.joint_rotation[...,3] = 1.0
 
-    # TODO: 你的代码
     
+    n1 = bvh_motion1.joint_position.shape[0]
+    n2 = bvh_motion2.joint_position.shape[0]
+
+    
+    for i in range(len(alpha)):
+        
+        j = int(i * n1 / len(alpha))
+        k = int(i * n2 / len(alpha))
+        for joint in range(bvh_motion1.joint_position.shape[1]):
+            rot = R.from_quat([bvh_motion1.joint_rotation[j,joint,:], bvh_motion2.joint_rotation[k,joint,:]])
+            slerp = Slerp([0, 1], rot)
+            res.joint_rotation[i,joint,:] = slerp(alpha[i]).as_quat()
+      
+        res.joint_position[i] = (1 - alpha[i]) * bvh_motion1.joint_position[j] + alpha[i] * bvh_motion2.joint_position[k]
+
+
     return res
 
 # part3
@@ -277,11 +306,29 @@ def concatenate_two_motions(bvh_motion1, bvh_motion2, mix_frame1, mix_time):
         你可能需要用到BVHMotion.sub_sequence 和 BVHMotion.append
     '''
     res = bvh_motion1.raw_copy()
+    motion2_copy = bvh_motion2.raw_copy()
     
     # TODO: 你的代码
     # 下面这种直接拼肯定是不行的(
-    res.joint_position = np.concatenate([res.joint_position[:mix_frame1], bvh_motion2.joint_position], axis=0)
-    res.joint_rotation = np.concatenate([res.joint_rotation[:mix_frame1], bvh_motion2.joint_rotation], axis=0)
+    motion1_frame = bvh_motion1.joint_position.shape[0]
+    motion2_frame = bvh_motion2.joint_position.shape[0]
+    sub_seq = bvh_motion1.sub_sequence(mix_frame1, mix_frame1 + mix_time)
+    motion2_rot = R.from_quat(bvh_motion1.joint_rotation[mix_frame1,0,:])
+    motion2_dir = motion2_rot.apply([0,0,1])
+    motion2_dir = motion2_dir.reshape(1,3)
+    motion2_dir = motion2_dir[0,[0,2]]
+    motion2_pos = bvh_motion1.joint_position[mix_frame1,0,[0,2]]
+    motion2_copy = motion2_copy.translation_and_rotation(0, motion2_pos, motion2_dir)
+    
+
+    alpha = np.linspace(0, 1, mix_time)
+    sub_seq2 = motion2_copy.sub_sequence(0,mix_time)
+    blend_motion = blend_two_motions(sub_seq, sub_seq2, alpha)
+    sub_seq3 = motion2_copy.sub_sequence(mix_time,motion2_frame)
+    blend_motion.append(sub_seq3)
+    
+    res.joint_position = np.concatenate([res.joint_position[:mix_frame1], blend_motion.joint_position], axis=0)
+    res.joint_rotation = np.concatenate([res.joint_rotation[:mix_frame1], blend_motion.joint_rotation], axis=0)
     
     return res
 
